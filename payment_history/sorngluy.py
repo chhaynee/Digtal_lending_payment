@@ -2,7 +2,7 @@ import os
 import re
 import logging
 import requests
-from openpyxl import load_workbook
+import mysql.connector
 from decimal import Decimal
 from datetime import datetime
 from typing import Optional, List, Dict
@@ -31,78 +31,123 @@ class Config:
     QR_CODE_SIZE = "300x300"
     MAX_AMOUNT = 10000
     PAYMENT_BASE_URL = "https://pay.ababank.com/yqH27C1mLesTLrFaA"
-    EXCEL_PATH = r"C:\Users\LENOVO\Documents\DigitLending\Digtal_lending_payment\payment_history\payment_history.xlsx"
+    
+    # Database configuration
+    DB_HOST = "localhost"
+    DB_USER = "root"
+    DB_PASSWORD = "Det3181"
+    DB_NAME = "demo"
+    DB_PORT = 3306
+    DB_TIMEOUT = 30
 
-class PaymentHistory:
-    def __init__(self, file_path: str):
-        self.file_path = file_path
-        self.payment_records = []
-        self.load_data()
+class PaymentDatabase:
+    def __init__(self):
+        self.connection = None
+        self.connect()
 
-    def load_data(self):
-        """Load data from Excel file using openpyxl."""
+    def connect(self):
+        """Connect to MySQL database."""
         try:
-            # Load the workbook
-            wb = load_workbook(self.file_path)
-            # Get the active sheet
-            sheet = wb.active
-            
-            # Get all values from the first row
-            data_list = []
-            for cell in sheet[1]:
-                if cell.value is not None:
-                    data_list.append(str(cell.value))
-            
-            # Process data in pairs (customer_name and amount)
-            for i in range(0, len(data_list), 2):
-                if i + 1 < len(data_list):
-                    try:
-                        record = {
-                            'customer_name': data_list[i],
-                            'amount': float(data_list[i + 1]),
-                            'date': datetime.now().strftime('%Y-%m-%d')
-                        }
-                        self.payment_records.append(record)
-                    except ValueError:
-                        logger.error(f"Error converting amount for customer {data_list[i]}")
-                        continue
-            
-            logger.info(f"Successfully loaded {len(self.payment_records)} payment records")
+            self.connection = mysql.connector.connect(
+                host=Config.DB_HOST,
+                user=Config.DB_USER,
+                password=Config.DB_PASSWORD,
+                database=Config.DB_NAME,
+                port=Config.DB_PORT,
+                connection_timeout=Config.DB_TIMEOUT,
+                auth_plugin='mysql_native_password'  # Using default auth protocol
+            )
+            logger.info("Successfully connected to database")
         except Exception as e:
-            logger.error(f"Error loading Excel file: {str(e)}")
-            self.payment_records = []
+            logger.error(f"Database connection error: {str(e)}")
+            self.connection = None
 
-    def get_customer_history(self, customer_name: str) -> List[Dict]:
-        """Get payment history for a specific customer."""
+    def ensure_connection(self):
+        """Ensure database connection is active."""
         try:
-            # Case-insensitive partial match for customer name
-            matches = [
-                record for record in self.payment_records
-                if customer_name.lower() in record['customer_name'].lower()
-            ]
-            return matches
-        except Exception as e:
-            logger.error(f"Error retrieving customer history: {str(e)}")
+            if self.connection is None or not self.connection.is_connected():
+                logger.info("Reconnecting to database...")
+                self.connect()
+        except:
+            self.connect()
+        return self.connection is not None
+
+def get_user_history(self, userid: str) -> List[Dict]:
+    """Get payment history for a specific user."""
+    if not self.ensure_connection():
+        logger.error("Failed to connect to database")
+        return []
+        
+    try:
+        cursor = self.connection.cursor(dictionary=True)
+        query = """
+            SELECT id, userid, amount, 
+                   COALESCE(transaction_date, NOW()) as transaction_date,
+                   COALESCE(status, 'completed') as status,
+                   COALESCE(payment_method, 'QR code') as payment_method,
+                   notes
+            FROM users 
+            WHERE userid = %s 
+            ORDER BY transaction_date DESC
+        """
+        logger.info(f"Executing query: {query} with userid={userid}")
+        cursor.execute(query, (userid,))
+        results = cursor.fetchall()
+        logger.info(f"Query returned {len(results)} results")
+        
+        # Format dates for display
+        for result in results:
+            if 'transaction_date' in result and result['transaction_date']:
+                result['transaction_date'] = result['transaction_date'].strftime('%Y-%m-%d %H:%M:%S')
+                
+        # Log sample of first result if available
+        if results:
+            logger.info(f"First result: {results[0]}")
+        
+        cursor.close()
+        return results
+    except Exception as e:
+        logger.error(f"Error retrieving user history: {str(e)}")
+        # Print full traceback for debugging
+        import traceback
+        logger.error(traceback.format_exc())
+        return []
+
+    def get_all_users(self) -> List[Dict]:
+        """Get all users and their payments."""
+        if not self.ensure_connection():
+            logger.error("Failed to connect to database")
             return []
-
-    def get_all_history(self) -> List[Dict]:
-        """Get all payment history."""
-        return self.payment_records
+            
+        try:
+            cursor = self.connection.cursor(dictionary=True)
+            query = """
+                SELECT id, userid, amount,
+                       COALESCE(transaction_date, NOW()) as transaction_date,
+                       COALESCE(status, 'completed') as status
+                FROM users 
+                ORDER BY id DESC 
+                LIMIT 5
+            """
+            cursor.execute(query)
+            results = cursor.fetchall()
+            cursor.close()
+            
+            # Format dates for display
+            for result in results:
+                if 'transaction_date' in result and result['transaction_date']:
+                    result['transaction_date'] = result['transaction_date'].strftime('%Y-%m-%d %H:%M:%S')
+            
+            return results
+        except Exception as e:
+            logger.error(f"Error retrieving users: {str(e)}")
+            return []
 
 class PaymentQRGenerator:
     @staticmethod
     def validate_user_id(user_id: str) -> bool:
         """Validate user ID format."""
         return bool(re.match(r'^[A-Za-z0-9_-]{4,20}$', user_id))
-    
-    @staticmethod
-    def validate_amount(amount: str) -> bool:
-        """Validate payment amount."""
-        try:
-            amount_decimal = Decimal(amount)
-            return 0 < amount_decimal <= Config.MAX_AMOUNT
-        except:
-            return False
     
     @staticmethod
     def generate_qr_code(payment_data: str) -> Optional[BytesIO]:
@@ -126,7 +171,7 @@ class PaymentQRGenerator:
 class PaymentBot:
     def __init__(self):
         self.qr_generator = PaymentQRGenerator()
-        self.payment_history = PaymentHistory(Config.EXCEL_PATH)
+        self.db = PaymentDatabase()
         
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle the /start command."""
@@ -134,8 +179,8 @@ class PaymentBot:
             "🤖 Welcome to the Digital Lending Payment Bot!\n\n"
             "Commands:\n"
             "/qr <user_id> <amount> - Generate a payment QR code\n"
-            "/history <customer_name> - View payment history\n"
-            "/total <customer_name> - View total amount paid\n"
+            "/history <user_id> - View payment history\n"
+            "/recent - View recent payments\n"
             "/help - Show this help message\n"
             "/status - Check bot status"
         )
@@ -147,11 +192,11 @@ class PaymentBot:
 
     async def status_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle the /status command."""
-        history_status = "✅ Online" if self.payment_history.payment_records else "❌ Offline"
+        db_status = "✅ Online" if self.db.ensure_connection() else "❌ Offline"
         status_message = (
             "✅ Bot is running normally\n"
             f"🕒 Current time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-            f"📊 Payment History: {history_status}\n"
+            f"🗄️ Database: {db_status}\n"
             "🔄 QR Service: Online"
         )
         await update.message.reply_text(status_message)
@@ -159,75 +204,61 @@ class PaymentBot:
     async def history_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle the /history command."""
         if not context.args:
-            # Show all payment history if no customer name is provided
-            history = self.payment_history.get_all_history()
-            if history:
-                message = "📊 Complete Payment History:\n\n"
-                for record in history:
-                    message += (
-                        f"👤 Customer: {record['customer_name']}\n"
-                        f"💰 Amount: ${record['amount']:.2f}\n"
-                        f"📅 Date: {record['date']}\n"
-                        f"➖➖➖➖➖➖➖➖\n"
-                    )
-                
-                # Split message if it's too long
-                if len(message) > 4096:
-                    messages = [message[i:i+4096] for i in range(0, len(message), 4096)]
-                    for msg in messages:
-                        await update.message.reply_text(msg)
-                else:
-                    await update.message.reply_text(message)
-            else:
-                await update.message.reply_text("❌ No payment history found")
+            await update.message.reply_text("Please provide a user ID. Example: /history john123")
             return
 
-        customer_name = " ".join(context.args)
-        history = self.payment_history.get_customer_history(customer_name)
+        userid = context.args[0]
+        history = self.db.get_user_history(userid)
 
         if history:
-            message = f"📊 Payment History for customers matching '{customer_name}':\n\n"
-            for record in history:
+            message = f"📊 Payment History for {userid}:\n\n"
+            total_amount = 0
+            for payment in history:
+                amount = float(payment.get('amount', 0))
+                total_amount += amount
+                
                 message += (
-                    f"👤 Customer: {record['customer_name']}\n"
-                    f"💰 Amount: ${record['amount']:.2f}\n"
-                    f"📅 Date: {record['date']}\n"
+                    f"🔹 Transaction #{payment['id']}\n"
+                    f"💰 Amount: ${amount:.2f}\n"
+                    f"🕒 Date: {payment.get('transaction_date', 'N/A')}\n"
+                    f"🔄 Status: {payment.get('status', 'completed').title()}\n"
+                )
+                
+                # Add payment method if available
+                if 'payment_method' in payment and payment['payment_method']:
+                    message += f"💳 Method: {payment['payment_method']}\n"
+                
+                # Add notes if available
+                if 'notes' in payment and payment['notes']:
+                    message += f"📝 Note: {payment['notes']}\n"
+                
+                message += "➖➖➖➖➖➖➖➖\n"
+            
+            # Add summary
+            message += f"\n💵 Total: ${total_amount:.2f} across {len(history)} transactions"
+            
+            await update.message.reply_text(message)
+        else:
+            await update.message.reply_text(f"❌ No payment history found for {userid}")
+
+    async def recent_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle the /recent command."""
+        recent_payments = self.db.get_all_users()
+        
+        if recent_payments:
+            message = "📊 Recent Payments:\n\n"
+            for payment in recent_payments:
+                message += (
+                    f"🔹 Transaction #{payment['id']}\n"
+                    f"👤 User ID: {payment['userid']}\n"
+                    f"💰 Amount: ${float(payment['amount']):.2f}\n"
+                    f"🕒 Date: {payment.get('transaction_date', 'N/A')}\n"
+                    f"🔄 Status: {payment.get('status', 'completed').title()}\n"
                     f"➖➖➖➖➖➖➖➖\n"
                 )
             await update.message.reply_text(message)
         else:
-            await update.message.reply_text(f"❌ No payment history found for '{customer_name}'")
-
-    async def total_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle the /total command."""
-        if not context.args:
-            # Show total for all customers if no name is provided
-            history = self.payment_history.get_all_history()
-            if history:
-                total_amount = sum(record['amount'] for record in history)
-                message = (
-                    "💰 Total Amount for All Customers:\n"
-                    f"${total_amount:.2f}\n"
-                    f"Number of transactions: {len(history)}"
-                )
-                await update.message.reply_text(message)
-            else:
-                await update.message.reply_text("❌ No payment history found")
-            return
-
-        customer_name = " ".join(context.args)
-        history = self.payment_history.get_customer_history(customer_name)
-
-        if history:
-            total_amount = sum(record['amount'] for record in history)
-            message = (
-                f"💰 Total Amount for customers matching '{customer_name}':\n"
-                f"${total_amount:.2f}\n"
-                f"Number of transactions: {len(history)}"
-            )
-            await update.message.reply_text(message)
-        else:
-            await update.message.reply_text(f"❌ No payment history found for '{customer_name}'")
+            await update.message.reply_text("❌ No recent payments found")
 
     async def create_qr_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle the /qr command."""
@@ -248,10 +279,16 @@ class PaymentBot:
                 )
                 return
 
-            if not self.qr_generator.validate_amount(amount):
-                await update.message.reply_text(
-                    f"❌ Invalid amount! Amount should be between 0 and {Config.MAX_AMOUNT}"
-                )
+            # Validate amount
+            try:
+                amount_float = float(amount)
+                if amount_float <= 0 or amount_float > Config.MAX_AMOUNT:
+                    await update.message.reply_text(
+                        f"❌ Invalid amount! Amount should be between 0 and {Config.MAX_AMOUNT}."
+                    )
+                    return
+            except ValueError:
+                await update.message.reply_text("❌ Invalid amount! Please enter a valid number.")
                 return
 
             payment_info = f"{Config.PAYMENT_BASE_URL}?user={user_id}&amount={amount}"
@@ -267,7 +304,6 @@ class PaymentBot:
                         f"👤 User ID: {user_id}\n"
                         f"💰 Amount: ${amount}\n"
                         f"🕒 Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-                        f"🔗 PaymentLink:{payment_info}"
                     )
                 )
             else:
@@ -288,6 +324,31 @@ class PaymentBot:
 def main():
     """Start the bot."""
     try:
+        # Initialize database schema if needed
+        db = PaymentDatabase()
+        if db.ensure_connection():
+            cursor = db.connection.cursor()
+            
+            # Check if users table exists, if not create it
+            cursor.execute("SHOW TABLES LIKE 'users'")
+            if not cursor.fetchone():
+                logger.info("Creating users table...")
+                cursor.execute("""
+                    CREATE TABLE users (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        userid VARCHAR(20) NOT NULL,
+                        amount DECIMAL(10, 2) NOT NULL,
+                        transaction_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        status ENUM('pending', 'completed', 'failed') DEFAULT 'completed',
+                        payment_method VARCHAR(50) DEFAULT 'QR code',
+                        notes TEXT
+                    )
+                """)
+                cursor.execute("CREATE INDEX idx_userid ON users(userid)")
+                db.connection.commit()
+                logger.info("Users table created successfully")
+            cursor.close()
+        
         bot = PaymentBot()
         application = ApplicationBuilder().token(Config.TELEGRAM_BOT_TOKEN).build()
         
@@ -297,7 +358,7 @@ def main():
         application.add_handler(CommandHandler("status", bot.status_command))
         application.add_handler(CommandHandler("qr", bot.create_qr_command))
         application.add_handler(CommandHandler("history", bot.history_command))
-        application.add_handler(CommandHandler("total", bot.total_command))
+        application.add_handler(CommandHandler("recent", bot.recent_command))
         
         # Add error handler
         application.add_error_handler(bot.error_handler)
