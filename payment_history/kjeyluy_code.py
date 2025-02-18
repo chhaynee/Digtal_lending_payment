@@ -1,3 +1,4 @@
+import decimal
 import os
 import re
 import logging
@@ -139,7 +140,9 @@ class PaymentBot:
                         f"💳 Payment QR Code\n"
                         f"👤 User ID: {user_id}\n"
                         f"💰 Amount: ${amount}\n"
-                        f"🕒 Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                        f"🕒 Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                        f"🔗 PaymentLink:{payment_info}\n"
+                        f"➖➖➖➖➖➖➖➖\n"
                     )
                 )
             else:
