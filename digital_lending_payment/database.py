@@ -1,6 +1,6 @@
 import mysql.connector
 from datetime import datetime
-from typing import List, Dict
+from typing import List, Dict, Optional
 from config import Config, logger
 
 class PaymentDatabase:
@@ -86,3 +86,46 @@ class PaymentDatabase:
         except Exception as e:
             logger.error(f"Error retrieving users: {str(e)}")
             return []
+        
+    def store_payment(self, userid: str, amount: float) -> bool:
+        """Store payment details after QR generation."""
+        if not self.ensure_connection():
+            logger.error("Failed to connect to database")
+            return False
+            
+        try:
+            cursor = self.connection.cursor()
+            query = """
+                INSERT INTO users (userid, amount)
+                VALUES (%s, %s)
+            """
+            cursor.execute(query, (userid, str(amount)))
+            self.connection.commit()
+            cursor.close()
+            logger.info(f"Stored payment for user {userid} with amount ${amount}")
+            return True
+        except Exception as e:
+            logger.error(f"Error storing payment: {str(e)}")
+            return False
+
+    def get_latest_payment(self) -> Optional[Dict]:
+        """Get the most recent payment."""
+        if not self.ensure_connection():
+            logger.error("Failed to connect to database")
+            return None
+            
+        try:
+            cursor = self.connection.cursor(dictionary=True)
+            query = """
+                SELECT id, userid, amount
+                FROM users 
+                ORDER BY id DESC 
+                LIMIT 1
+            """
+            cursor.execute(query)
+            result = cursor.fetchone()
+            cursor.close()
+            return result
+        except Exception as e:
+            logger.error(f"Error retrieving latest payment: {str(e)}")
+            return None

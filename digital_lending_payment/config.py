@@ -8,7 +8,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class Config:
+    # TelegramBot setting
     TELEGRAM_BOT_TOKEN = "7746794164:AAGWR56zZk1xlTK3kp7Ta0vKJw5mim85a4U"
+
+    #QR code setting
     GOQR_API_URL = "https://api.qrserver.com/v1/create-qr-code/"
     QR_CODE_SIZE = "300x300"
     MAX_AMOUNT = 10000

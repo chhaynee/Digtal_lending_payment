@@ -1,3 +1,4 @@
+# bot.py
 from datetime import datetime
 from telegram import Update, InputFile
 from telegram.ext import ContextTypes
@@ -7,136 +8,211 @@ from qr_generator import PaymentQRGenerator
 
 class PaymentBot:
     def __init__(self):
+        """Initialize bot with required components."""
         self.qr_generator = PaymentQRGenerator()
         self.db = PaymentDatabase()
-        
+
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle the /start command."""
         welcome_message = (
-            "🤖 Welcome to the Digital Lending Payment Bot!\n\n"
-            "Commands:\n"
-            "/qr <user_id> <amount> - Generate a payment QR code\n"
-            "/history <user_id> - View payment history\n"
-            "/recent - View recent payments\n"
-            "/help - Show this help message\n"
-            "/status - Check bot status"
+            "🎉 Welcome to ABA Digital Lending Payment Bot! 🤖\n\n"
+            "Available Commands:\n"
+            "➡️ /qr <user_id> <amount> - Generate payment QR code\n"
+            "➡️ /recent - View last payment receipt\n"
+            "➡️ /history <user_id> - View payment history\n"
+            "➡️ /help - Show this help message\n"
+            "➡️ /status - Check bot status\n\n"
+            "Need help? Just type /help to see all commands!"
         )
         await update.message.reply_text(welcome_message)
 
     async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await self.start_command(update, context)
+        """Handle the /help command."""
+        help_message = (
+            "📚 Command Guide:\n\n"
+            "1️⃣ Generate Payment QR:\n"
+            "   /qr <user_id> <amount>\n"
+            "   Example: /qr john123 50.50\n\n"
+            "2️⃣ View Payment Receipt:\n"
+            "   /recent\n"
+            "   Shows your last payment details\n\n"
+            "3️⃣ Check Payment History:\n"
+            "   /history <user_id>\n"
+            "   Example: /history john123\n\n"
+            "4️⃣ Check Bot Status:\n"
+            "   /status\n"
+            "   Shows current bot status\n\n"
+            "❓ Need more help? Contact @Mony_Pong"
+        )
+        await update.message.reply_text(help_message)
 
     async def status_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        db_status = "✅ Online" if self.db.ensure_connection() else "❌ Offline"
+        """Handle the /status command."""
+        db_status = "✅ Connected" if self.db.ensure_connection() else "❌ Disconnected"
         status_message = (
-            "✅ Bot is running normally\n"
-            f"🕒 Current time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+            "🔄 System Status\n"
+            "══════════════\n\n"
+            f"🤖 Bot: ✅ Online\n"
             f"🗄️ Database: {db_status}\n"
-            "🔄 QR Service: Online"
+            f"🌐 QR Service: ✅ Available\n"
+            f"🕒 Current Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+            "All systems operational! 👍"
         )
         await update.message.reply_text(status_message)
 
     async def history_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle the /history command."""
         if not context.args:
-            await update.message.reply_text("Please provide a user ID. Example: /history pong")
+            await update.message.reply_text(
+                "⚠️ Please provide a user ID\n"
+                "Example: /history john123"
+            )
             return
-
 
         userid = context.args[0]
         history = self.db.get_user_history(userid)
 
         if history:
-            message = f"📊 Payment History for {userid}:\n\n"
+            message = f"📊 Payment History: {userid}\n══════════════\n\n"
             total_amount = 0
-            
+
             for payment in history:
                 amount = float(payment['amount'])
                 total_amount += amount
-                
+
                 message += (
-                    f"🔹 Transaction #{payment['id']}\n"
+                    f"🔸 Transaction #{payment['id']}\n"
                     f"💰 Amount: ${amount:.2f}\n"
-                    f"➖➖➖➖➖➖➖➖\n"
+                    "──────────\n"
                 )
-            
-            message += f"\n💵 Total: ${total_amount:.2f} across {len(history)} transactions"
+
+            message += (
+                f"\n💵 Total Payments: ${total_amount:.2f}\n"
+                f"📊 Total Transactions: {len(history)}"
+            )
             await update.message.reply_text(message)
         else:
-            await update.message.reply_text(f"❌ No payment history found for {userid}")
-
-
-    async def recent_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        recent_payments = self.db.get_all_users()
-        
-        if recent_payments:
-            message = "📊 Recent Payments:\n\n"
-            for payment in recent_payments:
-                message += (
-                    f"🔹 Transaction #{payment['id']}\n"
-                    f"👤 User ID: {payment['userid']}\n"
-                    f"💰 Amount: ${float(payment['amount']):.2f}\n"
-                    f"🕒 Date: {payment.get('transaction_date', 'N/A')}\n"
-                    f"🔄 Status: {payment.get('status', 'completed').title()}\n"
-                    f"➖➖➖➖➖➖➖➖\n"
-                )
-            await update.message.reply_text(message)
-        else:
-            await update.message.reply_text("❌ No recent payments found")
+            await update.message.reply_text(
+                f"❌ No payment history found for {userid}\n"
+                "Make sure the user ID is correct and try again."
+            )
 
     async def create_qr_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle the /qr command."""
         try:
+            # Check command format
             if len(context.args) != 2:
                 await update.message.reply_text(
-                    "⚠️ Invalid format! Use: /qr <user_id> <amount>\n"
-                    "Example: /qr user123 50.50"
+                    "⚠️ Invalid format!\n"
+                    "Correct usage: /qr <user_id> <amount>\n"
+                    "Example: /qr john123 50.50"
                 )
                 return
 
             user_id, amount = context.args
 
+            # Validate user ID
             if not self.qr_generator.validate_user_id(user_id):
                 await update.message.reply_text(
-                    "❌ Invalid user ID format! User ID should be 4-20 characters "
-                    "and contain only letters, numbers, underscores, or hyphens."
+                    "❌ Invalid user ID!\n"
+                    "User ID should be 4-20 characters long and contain\n"
+                    "only letters, numbers, underscores, or hyphens."
                 )
                 return
 
+            # Process and validate amount
             try:
+                amount = amount.replace('$', '').strip()
                 amount_float = float(amount)
                 if amount_float <= 0 or amount_float > Config.MAX_AMOUNT:
                     await update.message.reply_text(
-                        f"❌ Invalid amount! Amount should be between 0 and {Config.MAX_AMOUNT}."
+                        f"❌ Invalid amount!\n"
+                        f"Amount must be between $0 and ${Config.MAX_AMOUNT}"
                     )
                     return
             except ValueError:
-                await update.message.reply_text("❌ Invalid amount! Please enter a valid number.")
+                await update.message.reply_text(
+                    "❌ Invalid amount!\n"
+                    "Please enter a valid number."
+                )
                 return
 
-            payment_info = f"{Config.PAYMENT_BASE_URL}?user={user_id}&amount={amount}"
-            await update.message.reply_text("🔄 Generating QR code...")
+            # Store payment information
+            if not self.db.store_payment(user_id, amount_float):
+                await update.message.reply_text(
+                    "❌ Failed to process payment.\n"
+                    "Please try again later."
+                )
+                return
+
+            # Generate QR code
+            await update.message.reply_text("🔄 Generating payment QR code...")
+            payment_info = f"{Config.PAYMENT_BASE_URL}?user={user_id}&amount={amount_float}"
             qr_image = self.qr_generator.generate_qr_code(payment_info)
-            
+
             if qr_image:
-                logger.info(f"Generated QR code for user {user_id} with amount {amount}")
+                # Log successful QR generation
+                logger.info(f"Generated QR code for user {user_id} with amount ${amount_float}")
+
+                # Send QR code with payment details
                 await update.message.reply_photo(
                     photo=InputFile(qr_image, filename="payment_qr.png"),
                     caption=(
-                        f"💳 Payment QR Code\n"
+                        "🎉 Payment QR Code Generated!\n"
+                        "══════════════\n"
                         f"👤 User ID: {user_id}\n"
-                        f"💰 Amount: ${amount}\n"
-                        f"🕒 Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                        f"💰 Amount: ${amount_float:.2f}\n"
+                        f"🕒 Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+                        "ℹ️ Use /recent to view payment receipt\n"
+                        "💡 Scan QR code to complete payment"
                     )
                 )
             else:
-                await update.message.reply_text("❌ Failed to generate QR code. Please try again later.")
-                
+                await update.message.reply_text(
+                    "❌ Failed to generate QR code.\n"
+                    "Please try again later."
+                )
+
         except Exception as e:
             logger.error(f"Error in create_qr_command: {str(e)}")
-            await update.message.reply_text("❌ An error occurred. Please try again later.")
+            await update.message.reply_text(
+                "❌ An error occurred.\n"
+                "Please try again later."
+            )
+
+    async def recent_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle the /recent command to show payment receipt."""
+        latest_payment = self.db.get_latest_payment()
+
+        if latest_payment:
+            amount = float(latest_payment['amount'])
+            receipt_message = (
+                "🧾 Payment Receipt\n"
+                "══════════════\n"
+                f"📝 Transaction ID: #{latest_payment['id']}\n"
+                f"👤 User ID: {latest_payment['userid']}\n"
+                f"💰 Amount Paid: ${amount:.2f}\n"
+                f"🕒 Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                f"✅ Status: Payment Successful\n\n"
+                "Thank you for your payment! 🙏\n"
+                "══════════════\n\n"
+                "Need help? Type /help"
+            )
+            await update.message.reply_text(receipt_message)
+        else:
+            await update.message.reply_text(
+                "❌ No recent payments found\n"
+                "Use /qr to make a payment first."
+            )
 
     async def error_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle errors in the bot."""
         logger.error(f"Update {update} caused error {context.error}")
+        
+        error_message = (
+            "❌ An error occurred while processing your request.\n"
+            "Please try again later or contact support if the issue persists."
+        )
+        
         if update and update.message:
-            await update.message.reply_text(
-                "❌ An error occurred while processing your request. Please try again later."
-            )
+            await update.message.reply_text(error_message)
