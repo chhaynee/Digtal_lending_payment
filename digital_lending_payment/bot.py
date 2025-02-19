@@ -36,9 +36,11 @@ class PaymentBot:
         await update.message.reply_text(status_message)
 
     async def history_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle the /history command."""
         if not context.args:
-            await update.message.reply_text("Please provide a user ID. Example: /history john123")
+            await update.message.reply_text("Please provide a user ID. Example: /history pong")
             return
+
 
         userid = context.args[0]
         history = self.db.get_user_history(userid)
@@ -46,29 +48,22 @@ class PaymentBot:
         if history:
             message = f"📊 Payment History for {userid}:\n\n"
             total_amount = 0
+            
             for payment in history:
-                amount = float(payment.get('amount', 0))
+                amount = float(payment['amount'])
                 total_amount += amount
                 
                 message += (
                     f"🔹 Transaction #{payment['id']}\n"
                     f"💰 Amount: ${amount:.2f}\n"
-                    f"🕒 Date: {payment.get('transaction_date', 'N/A')}\n"
-                    f"🔄 Status: {payment.get('status', 'completed').title()}\n"
+                    f"➖➖➖➖➖➖➖➖\n"
                 )
-                
-                if 'payment_method' in payment and payment['payment_method']:
-                    message += f"💳 Method: {payment['payment_method']}\n"
-                
-                if 'notes' in payment and payment['notes']:
-                    message += f"📝 Note: {payment['notes']}\n"
-                
-                message += "➖➖➖➖➖➖➖➖\n"
             
             message += f"\n💵 Total: ${total_amount:.2f} across {len(history)} transactions"
             await update.message.reply_text(message)
         else:
             await update.message.reply_text(f"❌ No payment history found for {userid}")
+
 
     async def recent_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         recent_payments = self.db.get_all_users()

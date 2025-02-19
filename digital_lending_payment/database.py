@@ -44,22 +44,14 @@ class PaymentDatabase:
         try:
             cursor = self.connection.cursor(dictionary=True)
             query = """
-                SELECT id, userid, amount, 
-                       COALESCE(transaction_date, NOW()) as transaction_date,
-                       COALESCE(status, 'completed') as status,
-                       COALESCE(payment_method, 'QR code') as payment_method,
-                       notes
+                SELECT id, userid, amount
                 FROM users 
                 WHERE userid = %s 
-                ORDER BY transaction_date DESC
+                ORDER BY id DESC
             """
             cursor.execute(query, (userid,))
             results = cursor.fetchall()
-            
-            for result in results:
-                if 'transaction_date' in result and result['transaction_date']:
-                    result['transaction_date'] = result['transaction_date'].strftime('%Y-%m-%d %H:%M:%S')
-            
+            logger.info(f"Found {len(results)} transactions for user {userid}")
             cursor.close()
             return results
         except Exception as e:
