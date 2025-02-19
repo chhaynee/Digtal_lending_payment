@@ -10,3 +10,4 @@ INSERT INTO users (userid, amount) VALUES ('det123', '67.6');
 INSERT INTO users (userid, amount) VALUES ('nee12', '56.0');
 INSERT INTO users (userid, amount) VALUES ('ro22', '45.0');
 INSERT INTO users (userid, amount) VALUES ('jaekeo', '23.3');
+
