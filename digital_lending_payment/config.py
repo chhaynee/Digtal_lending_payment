@@ -15,7 +15,7 @@ class Config:
     GOQR_API_URL = "https://api.qrserver.com/v1/create-qr-code/"
     QR_CODE_SIZE = "300x300"
     MAX_AMOUNT = 10000
-    PAYMENT_BASE_URL = "https://pay.ababank.com/yqH27C1mLesTLrFaA"
+    PAYMENT_BASE_URL = "https://pay.ababank.com/yX9JJaKSNv4Jqw7FA"
     
     # Database configuration
     DB_HOST = "localhost"

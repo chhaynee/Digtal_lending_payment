@@ -48,7 +48,7 @@ class PaymentBot:
                 "Need help? Just type /help to see all commands!"
             )
         else:
-            welcome_message += "\nContact an administrator if you need assistance."
+            welcome_message += "\nContact @HelpCenter if you need assistance."
         
         await update.message.reply_text(welcome_message)
 
