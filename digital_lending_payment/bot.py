@@ -173,7 +173,7 @@ class PaymentBot:
                 return
 
             user_id, amount = context.args
-
+            
             if not self.qr_generator.validate_user_id(user_id):
                 await update.message.reply_text(
                     "❌ Invalid user ID!\n"
@@ -218,8 +218,9 @@ class PaymentBot:
                         "══════════════\n"
                         f"👤 User ID: {user_id}\n"
                         f"💰 Amount: ${amount_float:.2f}\n"
-                        f"🕒 Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-                        "ℹ️ Use /recent to view payment receipt\n"
+                        f"🕒 Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                        f"🔗 Payment Link:{payment_info}\n\n"
+                        " ℹ️ Use /recent to view payment receipt\n"
                         "💡 Scan QR code to complete payment"
                     )
                 )
