@@ -6,6 +6,19 @@ from config import Config, logger
 from database import PaymentDatabase
 from qr_generator import PaymentQRGenerator
 
+# Define admin users
+ADMIN_USERS = ["1057935170", "987654321"]  # Replace with actual Telegram user IDs
+
+# Define user mappings
+USER_ID_MAPPINGS = {
+    "867015064": "naro",  # Telegram ID to username mapping for customer 1
+    "964470824": "pong"   # Telegram ID to username mapping for customer 2
+}
+
+# Function to check if a user is an admin
+def is_admin(user_id):
+    return str(user_id) in ADMIN_USERS
+
 class PaymentBot:
     def __init__(self):
         """Initialize bot with required components."""
@@ -14,40 +27,73 @@ class PaymentBot:
 
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle the /start command."""
+        user_telegram_id = str(update.message.from_user.id)
+        
+        # Base welcome message for all users
         welcome_message = (
             "🎉 Welcome to ABA Digital Lending Payment Bot! 🤖\n\n"
             "Available Commands:\n"
             "➡️ /qr <user_id> <amount> - Generate payment QR code\n"
             "➡️ /recent - View last payment receipt\n"
-            "➡️ /history <user_id> - View payment history\n"
-            "➡️ /help - Show this help message\n"
-            "➡️ /status - Check bot status\n\n"
-            "Need help? Just type /help to see all commands!"
+            "➡️ /history - View your payment history\n"
+            "➡️ /status - Check bot status\n"
         )
+        
+        # Add admin-only commands if user is admin
+        if is_admin(user_telegram_id):
+            welcome_message += (
+                "Admin Commands:\n"
+                "➡️ /history <user_id> - View payment history for any user\n"
+                "➡️ /help - Show detailed help message\n\n"
+                "Need help? Just type /help to see all commands!"
+            )
+        else:
+            welcome_message += "\nContact an administrator if you need assistance."
+        
         await update.message.reply_text(welcome_message)
 
     async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle the /help command."""
-        help_message = (
-            "📚 Command Guide:\n\n"
-            "1️⃣ Generate Payment QR:\n"
-            "   /qr <user_id> <amount>\n"
-            "   Example: /qr john123 50.50\n\n"
-            "2️⃣ View Payment Receipt:\n"
-            "   /recent\n"
-            "   Shows your last payment details\n\n"
-            "3️⃣ Check Payment History:\n"
-            "   /history <user_id>\n"
-            "   Example: /history john123\n\n"
-            "4️⃣ Check Bot Status:\n"
-            "   /status\n"
-            "   Shows current bot status\n\n"
-            "❓ Need more help? Contact @Mony_Pong"
-        )
-        await update.message.reply_text(help_message)
+        """Handle the /help command - restricted to admins only."""
+        user_telegram_id = str(update.message.from_user.id)
+        
+        # Check if user is an admin
+        if is_admin(user_telegram_id):
+            help_message = (
+                "📚 Command Guide:\n\n"
+                "1️⃣ Generate Payment QR:\n"
+                "   /qr <user_id> <amount>\n"
+                "   Example: /qr john123 50.50\n\n"
+                "2️⃣ View Payment Receipt:\n"
+                "   /recent\n"
+                "   Shows your last payment details\n\n"
+                "3️⃣ Check Payment History:\n"
+                "   /history [user_id]\n"
+                "   - Use without user_id to see your own history\n"
+                "   - Admins can specify user_id to see others\n\n"
+                "4️⃣ Check Bot Status:\n"
+                "   /status\n"
+                "   Shows current bot status\n\n"
+                "❓ Need more help? Contact @Mony_Pong"
+            )
+            await update.message.reply_text(help_message)
+        else:
+            await update.message.reply_text(
+                "❌ Access Denied!\n"
+                "Only administrators can access the help command."
+            )
 
     async def status_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle the /status command."""
+        user_telegram_id = str(update.message.from_user.id)
+        
+        # Check if user is admin or registered customer
+        if not (is_admin(user_telegram_id) or user_telegram_id in USER_ID_MAPPINGS):
+            await update.message.reply_text(
+                "❌ Access Denied!\n"
+                "You are not authorized to check bot status."
+            )
+            return
+
         db_status = "✅ Connected" if self.db.ensure_connection() else "❌ Disconnected"
         status_message = (
             "🔄 System Status\n"
@@ -61,19 +107,27 @@ class PaymentBot:
         await update.message.reply_text(status_message)
 
     async def history_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle the /history command."""
-        if not context.args:
+        """Handle the /history command with both admin and user access."""
+        user_telegram_id = str(update.message.from_user.id)
+        
+        # If user is admin and provides a user ID, show that user's history
+        if is_admin(user_telegram_id) and context.args:
+            requested_user_id = context.args[0]
+            history = self.db.get_user_history(requested_user_id)
+        # If user is a registered customer, show their own history
+        elif user_telegram_id in USER_ID_MAPPINGS:
+            requested_user_id = USER_ID_MAPPINGS[user_telegram_id]
+            history = self.db.get_user_history(requested_user_id)
+        # If user is neither admin nor registered customer
+        else:
             await update.message.reply_text(
-                "⚠️ Please provide a user ID\n"
-                "Example: /history john123"
+                "❌ Access Denied!\n"
+                "You are not authorized to view payment history."
             )
             return
 
-        userid = context.args[0]
-        history = self.db.get_user_history(userid)
-
         if history:
-            message = f"📊 Payment History: {userid}\n══════════════\n\n"
+            message = f"📊 Payment History: {requested_user_id}\n══════════════\n\n"
             total_amount = 0
 
             for payment in history:
@@ -93,14 +147,23 @@ class PaymentBot:
             await update.message.reply_text(message)
         else:
             await update.message.reply_text(
-                f"❌ No payment history found for {userid}\n"
+                f"❌ No payment history found for {requested_user_id}\n"
                 "Make sure the user ID is correct and try again."
             )
 
     async def create_qr_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle the /qr command."""
+        user_telegram_id = str(update.message.from_user.id)
+        
+        # Check if user is admin or registered customer
+        if not (is_admin(user_telegram_id) or user_telegram_id in USER_ID_MAPPINGS):
+            await update.message.reply_text(
+                "❌ Access Denied!\n"
+                "You are not authorized to generate QR codes."
+            )
+            return
+
         try:
-            # Check command format
             if len(context.args) != 2:
                 await update.message.reply_text(
                     "⚠️ Invalid format!\n"
@@ -111,7 +174,6 @@ class PaymentBot:
 
             user_id, amount = context.args
 
-            # Validate user ID
             if not self.qr_generator.validate_user_id(user_id):
                 await update.message.reply_text(
                     "❌ Invalid user ID!\n"
@@ -120,7 +182,6 @@ class PaymentBot:
                 )
                 return
 
-            # Process and validate amount
             try:
                 amount = amount.replace('$', '').strip()
                 amount_float = float(amount)
@@ -137,7 +198,6 @@ class PaymentBot:
                 )
                 return
 
-            # Store payment information
             if not self.db.store_payment(user_id, amount_float):
                 await update.message.reply_text(
                     "❌ Failed to process payment.\n"
@@ -145,16 +205,12 @@ class PaymentBot:
                 )
                 return
 
-            # Generate QR code
             await update.message.reply_text("🔄 Generating payment QR code...")
             payment_info = f"{Config.PAYMENT_BASE_URL}?user={user_id}&amount={amount_float}"
             qr_image = self.qr_generator.generate_qr_code(payment_info)
 
             if qr_image:
-                # Log successful QR generation
                 logger.info(f"Generated QR code for user {user_id} with amount ${amount_float}")
-
-                # Send QR code with payment details
                 await update.message.reply_photo(
                     photo=InputFile(qr_image, filename="payment_qr.png"),
                     caption=(
@@ -182,7 +238,22 @@ class PaymentBot:
 
     async def recent_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle the /recent command to show payment receipt."""
-        latest_payment = self.db.get_latest_payment()
+        user_telegram_id = str(update.message.from_user.id)
+        
+        # If user is admin, show the latest payment
+        if is_admin(user_telegram_id):
+            latest_payment = self.db.get_latest_payment()
+        # If user is a registered customer, show their own latest payment
+        elif user_telegram_id in USER_ID_MAPPINGS:
+            user_id = USER_ID_MAPPINGS[user_telegram_id]
+            latest_payment = self.db.get_user_latest_payment(user_id)
+        # If user is neither admin nor registered customer
+        else:
+            await update.message.reply_text(
+                "❌ Access Denied!\n"
+                "You are not authorized to view payment receipts."
+            )
+            return
 
         if latest_payment:
             amount = float(latest_payment['amount'])
@@ -196,7 +267,7 @@ class PaymentBot:
                 f"✅ Status: Payment Successful\n\n"
                 "Thank you for your payment! 🙏\n"
                 "══════════════\n\n"
-                "Need help? Type /help"
+                "Need help? Contact an administrator."
             )
             await update.message.reply_text(receipt_message)
         else:

@@ -109,7 +109,7 @@ class PaymentDatabase:
             return False
 
     def get_latest_payment(self) -> Optional[Dict]:
-        """Get the most recent payment."""
+        """Get the most recent payment (admin only)."""
         if not self.ensure_connection():
             logger.error("Failed to connect to database")
             return None
@@ -128,4 +128,28 @@ class PaymentDatabase:
             return result
         except Exception as e:
             logger.error(f"Error retrieving latest payment: {str(e)}")
+            return None
+
+    def get_user_latest_payment(self, userid: str) -> Optional[Dict]:
+        """Get the most recent payment for a specific user."""
+        if not self.ensure_connection():
+            logger.error("Failed to connect to database")
+            return None
+            
+        try:
+            cursor = self.connection.cursor(dictionary=True)
+            query = """
+                SELECT id, userid, amount
+                FROM users 
+                WHERE userid = %s
+                ORDER BY id DESC 
+                LIMIT 1
+            """
+            cursor.execute(query, (userid,))
+            result = cursor.fetchone()
+            cursor.close()
+            logger.info(f"Retrieved latest payment for user {userid}")
+            return result
+        except Exception as e:
+            logger.error(f"Error retrieving user's latest payment: {str(e)}")
             return None
