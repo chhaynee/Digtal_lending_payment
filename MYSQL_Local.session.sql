@@ -12,4 +12,4 @@ CREATE TABLE users (
 INSERT INTO users (userid, amount) VALUES ('chetra', '25');
 
 SELECT * FROM users;
-DELETE FROM users WHERE userid = 'pong';
+DELETE FROM users WHERE userid = 'naro';

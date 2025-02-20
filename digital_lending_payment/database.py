@@ -141,7 +141,7 @@ class PaymentDatabase:
             query = """
                 SELECT id, userid, amount
                 FROM users 
-                WHERE userid = %s
+                WHERE userid = %sSELECT * FROM users;
                 ORDER BY id DESC 
                 LIMIT 1
             """
