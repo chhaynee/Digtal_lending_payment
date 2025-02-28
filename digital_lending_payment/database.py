@@ -130,6 +130,29 @@ class PaymentDatabase:
             logger.error(f"Error retrieving latest payment: {str(e)}")
             return None
 
+    # def get_user_latest_payment(self, userid: str) -> Optional[Dict]:
+    #     """Get the most recent payment for a specific user."""
+    #     if not self.ensure_connection():
+    #         logger.error("Failed to connect to database")
+    #         return None
+            
+    #     try:
+    #         cursor = self.connection.cursor(dictionary=True)
+    #         query = """
+    #             SELECT id, userid, amount
+    #             FROM users 
+    #             WHERE userid = %sSELECT * FROM users;
+    #             ORDER BY id DESC 
+    #             LIMIT 1
+    #         """
+    #         cursor.execute(query, (userid,))
+    #         result = cursor.fetchone()
+    #         cursor.close()
+    #         logger.info(f"Retrieved latest payment for user {userid}")
+    #         return result
+    #     except Exception as e:
+    #         logger.error(f"Error retrieving user's latest payment: {str(e)}")
+    #         return None
     def get_user_latest_payment(self, userid: str) -> Optional[Dict]:
         """Get the most recent payment for a specific user."""
         if not self.ensure_connection():
@@ -138,10 +161,11 @@ class PaymentDatabase:
             
         try:
             cursor = self.connection.cursor(dictionary=True)
+            # Fixed SQL injection vulnerability by removing the stray "SELECT * FROM users;"
             query = """
                 SELECT id, userid, amount
                 FROM users 
-                WHERE userid = %sSELECT * FROM users;
+                WHERE userid = %s
                 ORDER BY id DESC 
                 LIMIT 1
             """

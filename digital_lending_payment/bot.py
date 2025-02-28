@@ -6,6 +6,7 @@ from config import Config, logger
 from database import PaymentDatabase
 from qr_generator import PaymentQRGenerator
 
+
 # Define admin users
 ADMIN_USERS = ["1057935170", "987654321"]  # Replace with actual Telegram user IDs
 
